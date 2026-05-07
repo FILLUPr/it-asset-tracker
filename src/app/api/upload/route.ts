@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY!;
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,22 +15,29 @@ export async function POST(req: NextRequest) {
     const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
     const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
 
-    const { error } = await supabaseAdmin.storage
-      .from('images')
-      .upload(fileName, buffer, { contentType: file.type, upsert: false });
+    const uploadRes = await fetch(
+      `${SUPABASE_URL}/storage/v1/object/images/${fileName}`,
+      {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': file.type,
+        },
+        body: bytes,
+      }
+    );
 
-    if (error) {
-      console.error('Upload error:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!uploadRes.ok) {
+      const err = await uploadRes.text();
+      console.error('Upload error:', err);
+      return NextResponse.json({ error: err }, { status: 500 });
     }
 
-    const { data: urlData } = supabaseAdmin.storage
-      .from('images')
-      .getPublicUrl(fileName);
+    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/images/${fileName}`;
 
-    return NextResponse.json({ url: urlData.publicUrl });
+    return NextResponse.json({ url: publicUrl });
   } catch (error) {
     console.error('Upload error:', error);
     return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
